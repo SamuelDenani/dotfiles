@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# claude-grid [dir1 dir2 dir3 dir4] — 2x2 tmux grid, a `claude` session per pane.
+# No args: all four panes start in $PWD. Fewer than 4: remaining panes use $PWD.
+set -euo pipefail
+
+# Never run on the scratch socket (e.g. invoked from inside the scratch popup) —
+# that would build the grid on the wrong server.
+if [ -n "${TMUX:-}" ] && [ "$(basename -- "${TMUX%%,*}")" = "cc-scratch" ]; then
+  echo "don't run claude-grid inside the scratch popup — run it from a normal pane" >&2
+  exit 1
+fi
+
+SESSION="${CC_GRID_SESSION:-cc}"
+args=("$@")
+
+dirs=()
+for i in 0 1 2 3; do
+  d="${args[$i]:-$PWD}"
+  dirs+=("$(cd "$d" 2>/dev/null && pwd || echo "$PWD")")
+done
+
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+  echo "session '$SESSION' already exists — attach: tmux attach -t $SESSION" >&2
+  exit 1
+fi
+
+tmux new-session -d -s "$SESSION" -c "${dirs[0]}"
+tmux send-keys -t "$SESSION" "claude" C-m
+for i in 1 2 3; do
+  tmux split-window -t "$SESSION" -c "${dirs[$i]}"
+  tmux select-layout -t "$SESSION" tiled >/dev/null
+  tmux send-keys -t "$SESSION" "claude" C-m
+done
+tmux select-layout -t "$SESSION" tiled >/dev/null
+
+# Per-pane state border, scoped to this session only. Bottom line: state dot +
+# path on the left, dim pane-number badge right-aligned (bottom-right corner).
+tmux set -t "$SESSION" pane-border-status bottom
+tmux set -t "$SESSION" pane-border-format \
+  ' #{?#{==:#{@cc_state},needs-you},#[fg=red]●,#{?#{==:#{@cc_state},done},#[fg=green]✓,#{?#{==:#{@cc_state},working},#[fg=yellow]◐,#[fg=colour240]○}}} #[fg=colour244]#{b:pane_current_path}#[align=right]#[fg=colour240,dim]#{pane_index} '
+
+if [ -n "${TMUX:-}" ]; then
+  tmux switch-client -t "$SESSION"
+else
+  exec tmux attach -t "$SESSION"
+fi

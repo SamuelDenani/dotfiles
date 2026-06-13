@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# cc-scratch [dir] — toggle the persistent scratch popup, opened in [dir].
+#
+# Opened by the MAIN server's prefix+Enter (display-popup -d sets [dir]). The
+# scratch lives on its own tmux socket (cc-scratch) so history survives close.
+#
+# Model: ONE persistent session `main`, ONE window per dir. Reopening from a dir
+# returns to that dir's window with all state intact; a new dir gets a fresh
+# window started there. No `cd` is ever typed (no echo) and no shell is killed
+# (no wipe).
+#
+# Toggle/no-nest: that server reads ~/.tmux.conf too, so it would inherit the
+# open-popup binding. Two guards prevent popup-in-popup forever:
+#   1. prefix+Enter is rebound to detach-client on the scratch server (same key
+#      CLOSES; can never open another popup).
+#   2. If cc-scratch is ever entered while already inside the scratch socket, it
+#      detaches instead of opening.
+set -euo pipefail
+
+dir="${1:-$PWD}"
+SOCK=cc-scratch
+S=main
+
+# Guard 2: already inside the scratch server? Close, never nest.
+cur_sock="${TMUX%%,*}"
+if [ -n "$cur_sock" ] && [ "$(basename -- "$cur_sock")" = "$SOCK" ]; then
+  tmux -L "$SOCK" detach-client 2>/dev/null || true
+  exit 0
+fi
+
+name="$(basename -- "$dir")"
+
+if ! tmux -L "$SOCK" has-session -t "$S" 2>/dev/null; then
+  tmux -L "$SOCK" new-session -d -s "$S" -n "$name" -c "$dir"
+else
+  # Reuse the window already sitting in $dir; else make one. '|' separates
+  # fields (paths never contain it). No cd typed, existing windows untouched.
+  win=$(tmux -L "$SOCK" list-windows -t "$S" -F '#{window_index}|#{pane_current_path}' \
+        | awk -F'|' -v d="$dir" '$2==d{print $1; exit}')
+  if [ -z "$win" ]; then
+    win=$(tmux -L "$SOCK" new-window -t "$S" -n "$name" -c "$dir" -P -F '#{window_index}')
+  fi
+  tmux -L "$SOCK" select-window -t "$S:$win"
+fi
+
+# Guard 1: override the inherited open-popup binding on this server (idempotent).
+tmux -L "$SOCK" bind Enter detach-client
+
+exec tmux -L "$SOCK" attach -t "$S"
