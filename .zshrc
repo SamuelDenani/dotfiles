@@ -5,6 +5,8 @@ path=(
   "/usr/local/bin"
   "/usr/local/go/bin"
   "$HOME/go/bin"
+  "/opt/nvim-linux-x86_64/bin"
+  "~/.npmrc"
   $path
 )
 export PATH
@@ -81,12 +83,8 @@ ZSH_THEME="jovial"
 plugins=(
   git
   zoxide
-  autojump
   urltools
   bgnotify
-  zsh-autosuggestions
-  zsh-syntax-highlighting
-  zsh-history-enquirer
   jovial
 )
 
