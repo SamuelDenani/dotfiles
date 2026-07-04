@@ -5,7 +5,7 @@ path=(
   "/usr/local/bin"
   "/usr/local/go/bin"
   "$HOME/go/bin"
-  "/opt/nvim-linux-x86_64/bin"
+  "/opt/nvim"
   "~/.npmrc"
   $path
 )
